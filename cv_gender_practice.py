@@ -1,14 +1,17 @@
 import pandas as pd
 
 df = pd.read_csv('combined_human_mouse_meta_v2.csv')
-df.head()
 
-df = df.drop(columns = ['PLAYER', 'CS'])
+df = df.drop(columns = ['present', 'num_reads'])
+print(df.head())
 
-#first 12 columns
-X = df.iloc[:,0:13]
-#variable being predicted, Hall of Fame
-y = df.iloc[:,13]
+values_to_keep = ['male', 'female']
+df = df[df['metadata_sex'].isin(values_to_keep)]
+print(df.head())
+#metadata_sex column
+X = df.iloc[:,0:5]
+#expression_sex column
+y = df.iloc[:,6]
 
 from sklearn.model_selection import train_test_split
 
