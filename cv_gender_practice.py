@@ -1,5 +1,13 @@
 import pandas as pd
 
+
+# use sys.argv to accept arguments - name of input file, column name w/ class labels, column names to drop (comma-separated list), description of comparison (sex, autosomal, all) name of output file to create
+# script is generic - not specific to just 1 dataset 
+# output file - for each cv fold, what is the roc_auc score? - 5 rows, one for each fold
+# one column w/ name of input file - then we can merge all of the output files together at the end 
+# might need to write another script to reformat the expression data so that we can use it w the ml stuff 
+
+
 df = pd.read_csv('combined_human_mouse_meta_v2.csv')
 
 df = df.drop(columns = ['present', 'num_reads'])
