@@ -1,12 +1,8 @@
 import pandas as pd
 from sys import argv
 from sklearn import RandomForestClassifier, cross_val_score, roc_auc_score
-#GSE37069 - Burn tissue
-#GSE99039 - Parkinson's
-
 
 #REMEMBER: Add myself to Abby's github as a contributor so I can push the changes!
-
 
 # use sys.argv to accept arguments - name of input file, column name w/ class labels, column names to drop (comma-separated list), description of comparison (sex, autosomal, all) name of output file to create
 # script is generic - not specific to just 1 dataset
