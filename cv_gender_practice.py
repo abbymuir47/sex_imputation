@@ -12,6 +12,8 @@ from sklearn.metrics import roc_auc_score
 # one column w/ name of input file - then we can merge all of the output files together at the end
 # might need to write another script to reformat the expression data so that we can use it w the ml stuff
 
+# command line command to run the program: python3 cv_gender_practice.py GSE10358/GSE10358.tsv GSE10358/metadata_GSE10358.tsv xy myoutput.tsv    
+
 
 def main():
     try:
@@ -27,35 +29,30 @@ def main():
         with open(expression_filename, 'r') as expressionFile, open(metadata_filename, 'r') as metadataFile, open(output_filename, 'w') as writeFile:
             expression_df = pd.read_csv(expressionFile, sep='\t')
             metadata_df = pd.read_csv(metadataFile, sep='\t')
-            # print("metadata_df: ", metadata_df.head())
 
-            expression_df = expression_df.set_index('Gene')
-            expression_df.index.name = 'refinebio_accession_code'
-            print("before transposing:\n", expression_df.head())
-            # print("\n\n\n\n\n\n\n")
+            column_names = expression_df.columns.tolist()
 
             expression_df = expression_df.transpose()
-            #expression_df = expression_df.rename(columns={'Gene':'refinebio_accession_code'}, inplace=True)
-            #expression_df.index.name = 'refinebio_accession_code'
-            print("after transposing:\n", expression_df.head())
-            # print("#rows: ", len(expression_df))
+            expression_df.columns = expression_df.iloc[0] 
+            expression_df = expression_df[1:]
+            expression_df.insert(0, 'refinebio_accession_code', column_names[1:])
 
             metadata_df = metadata_df[['refinebio_accession_code', "refinebio_sex"]]
-            # print("should only be 2 columns: ", metadata_df)
 
             merged_df = pd.merge(metadata_df, expression_df, on='refinebio_accession_code')
-            print("after merging:", merged_df.head())
+            print("after merging:\n", merged_df.head())
 
             #only keep rows with existing sex data
             values_to_keep = ['male', 'female']
-            df = df[df[sex_col].isin(values_to_keep)]
+            merged_df = merged_df[merged_df['refinebio_sex'].isin(values_to_keep)]
 
             #metadata_sex column
-            X = df.iloc[:,0:5]
+            X = merged_df.iloc[2:]
             #expression_sex column
-            y = df.iloc[:,6]
+            y = merged_df.iloc[1]
 
             #hyper parameters
+            print("about to make randomforest")
             rf = RandomForestClassifier(n_estimators = 1000,
                                         criterion = 'entropy',
                                         min_samples_split = 10,
@@ -63,6 +60,7 @@ def main():
                                         random_state = 42
             )
 
+            print("about to do cross validation")
             cv_scores = cross_val_score(rf, X, y, cv=5, scoring='accuracy')
             print("Cross-validation scores for each fold:", cv_scores)
 
