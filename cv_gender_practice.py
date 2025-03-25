@@ -1,16 +1,8 @@
 import pandas as pd
+import numpy as np
 from sys import argv
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import cross_val_score
-from sklearn.metrics import roc_auc_score
-
-#REMEMBER: Add myself to Abby's github as a contributor so I can push the changes!
-
-# use sys.argv to accept arguments - name of input file, column name w/ class labels, column names to drop (comma-separated list), description of comparison (sex, autosomal, all) name of output file to create
-# script is generic - not specific to just 1 dataset
-# output file - for each cv fold, what is the roc_auc score? - 5 rows, one for each fold
-# one column w/ name of input file - then we can merge all of the output files together at the end
-# might need to write another script to reformat the expression data so that we can use it w the ml stuff
 
 # command line command to run the program: python3 cv_gender_practice.py GSE10358/GSE10358.tsv GSE10358/metadata_GSE10358.tsv xy myoutput.tsv    
 
@@ -27,49 +19,57 @@ def main():
 
 
         with open(expression_filename, 'r') as expressionFile, open(metadata_filename, 'r') as metadataFile, open(output_filename, 'w') as writeFile:
-            expression_df = pd.read_csv(expressionFile, sep='\t')
+            exp_df = pd.read_csv(expressionFile, sep='\t')
             metadata_df = pd.read_csv(metadataFile, sep='\t')
 
-            column_names = expression_df.columns.tolist()
+            column_names = exp_df.columns.tolist()
 
-            expression_df = expression_df.transpose()
-            expression_df.columns = expression_df.iloc[0] 
-            expression_df = expression_df[1:]
-            expression_df.insert(0, 'refinebio_accession_code', column_names[1:])
+            exp_df = exp_df.transpose()
+            exp_df.columns = exp_df.iloc[0] 
+            exp_df = exp_df[1:]
+            exp_df.insert(0, 'refinebio_accession_code', column_names[1:])
 
             metadata_df = metadata_df[['refinebio_accession_code', "refinebio_sex"]]
 
-            merged_df = pd.merge(metadata_df, expression_df, on='refinebio_accession_code')
-            print("after merging:\n", merged_df.head())
+            merged_df = pd.merge(metadata_df, exp_df, on='refinebio_accession_code')
 
             #only keep rows with existing sex data
             values_to_keep = ['male', 'female']
             merged_df = merged_df[merged_df['refinebio_sex'].isin(values_to_keep)]
 
-            #metadata_sex column
-            X = merged_df.iloc[2:]
-            #expression_sex column
-            y = merged_df.iloc[1]
+            #target vector, sex
+            sex_col = merged_df['refinebio_sex']
+            y = sex_col
+
+            #feature matrix, gene expression data
+            X = merged_df.drop(columns=["refinebio_accession_code", "refinebio_sex"])
 
             #hyper parameters
-            print("about to make randomforest")
-            rf = RandomForestClassifier(n_estimators = 1000,
+            rf_model = RandomForestClassifier(n_estimators = 1000,
                                         criterion = 'entropy',
                                         min_samples_split = 10,
-                                        max_depth = 14,
-                                        random_state = 42
+                                        max_depth = 14
             )
 
-            print("about to do cross validation")
-            cv_scores = cross_val_score(rf, X, y, cv=5, scoring='accuracy')
-            print("Cross-validation scores for each fold:", cv_scores)
+            # Create binary for y_true (turn male/female into zeroes and ones)
+            binary_sex_col = sex_col.map({'male': 1, 'female': 0})
 
             #Calculate ROC AUC
-            roc_auc = roc_auc_score(sex_col, y)
-            print(roc_auc)
+            print("Calculating ROC AUC... ")
+            roc_auc_scores = cross_val_score(rf_model, X, binary_sex_col, cv=6, scoring='roc_auc')
+            print(f'ROC AUC scores for each fold: {roc_auc_scores}')
+            print(f'Mean ROC AUC score: {roc_auc_scores.mean()}')
 
             #create output file
+            cv_folds = np.arange(1, len(roc_auc_scores) + 1)
+            output_df = pd.DataFrame({
+                'input_filename' : [expression_filename] * len(roc_auc_scores),
+                'cv_fold' : cv_folds,
+                'roc_score' : roc_auc_scores
+            })
 
+            output_df.to_csv(writeFile, sep='\t', index=False)
+            print(f"ROC AUC has been written to {writeFile.name}.")
 
     except ValueError as ve:
         print(f"Error: {ve}")
