@@ -6,7 +6,6 @@ from sklearn.model_selection import cross_val_score
 
 # command line command to run the program: python3 cv_gender_practice.py GSE10358/GSE10358.tsv GSE10358/metadata_GSE10358.tsv xy myoutput.tsv    
 
-
 def main():
     try:
         if len(argv) != 5:
