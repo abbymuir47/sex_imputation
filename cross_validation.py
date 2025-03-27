@@ -40,7 +40,7 @@ def main():
 
         #Calculate ROC AUC
         print("Calculating ROC AUC... ")
-        roc_auc_scores = cross_val_score(rf_model, X, binary_sex_col, cv=6, scoring='roc_auc')
+        roc_auc_scores = cross_val_score(rf_model, X, binary_sex_col, cv=5, scoring='roc_auc')
         print(f'ROC AUC scores for each fold: {roc_auc_scores}')
         print(f'Mean ROC AUC score: {roc_auc_scores.mean()}')
 
