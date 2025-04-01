@@ -4,7 +4,7 @@ from sys import argv
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import cross_val_score
 
-# command line command to run the program: python3 cv_gender_practice.py GSE10358/GSE10358.tsv GSE10358/metadata_GSE10358.tsv xy myoutput.tsv
+# command line command to run the program: python3 cross_validation.py GSE10358/GSE10358.tsv GSE10358/metadata_GSE10358.tsv sex myoutput.tsv
 
 def main():
     try:
@@ -16,17 +16,18 @@ def main():
         comparison_type = argv[3]
         output_filename = argv[4]
 
-        merged_df = create_dataframe(expression_filename, metadata_filename)
+        expression_df = create_expression_dataframe(expression_filename, metadata_filename)
 
         #placeholder for filtering based on comparison type
-        #filtered_df = select_chromosomes(merged_df)
+        ensembl_ids_list = select_chromosomes(comparison_type)
+        print(ensembl_ids_list[1:5])
 
         #target vector, sex
-        sex_col = merged_df['refinebio_sex']
+        sex_col = expression_df['refinebio_sex']
         y = sex_col
 
         #feature matrix, gene expression data
-        X = merged_df.drop(columns=["refinebio_accession_code", "refinebio_sex"])
+        X = expression_df.drop(columns=["refinebio_accession_code", "refinebio_sex"])
 
         #hyper parameters
         rf_model = RandomForestClassifier(n_estimators = 1000,
@@ -58,15 +59,9 @@ def main():
 
     except ValueError as ve:
         print(f"Error: {ve}")
-       
-#placeholder function for selection
-def select_chromosomes(comparison_type):
-    if(comparison_type == "xy"):
-        return "sex chromosome selected"
-    elif(comparison_type == "whole genome"):
-        return "whole genome selected"
+    
 
-def create_dataframe(expression_filename, metadata_filename):
+def create_expression_dataframe(expression_filename, metadata_filename):
     with open(expression_filename, 'r') as expressionFile, open(metadata_filename, 'r') as metadataFile:
         exp_df = pd.read_csv(expressionFile, sep='\t')
         metadata_df = pd.read_csv(metadataFile, sep='\t')
@@ -85,7 +80,33 @@ def create_dataframe(expression_filename, metadata_filename):
         #only keep rows with existing sex data
         values_to_keep = ['male', 'female']
         merged_df = merged_df[merged_df['refinebio_sex'].isin(values_to_keep)]
+        print("merged data frame: \n", merged_df)
         return merged_df
+
+#returns a list of ensembl ID's to use, based on the user's comparison type input
+#is this if-else logic okay, or should it be a try-catch block?
+def select_chromosomes(comparison_type):
+
+    with open("ensembl_data.tsv", "r") as readFile:
+        ensembl_df = pd.read_csv(readFile, sep='\t')
+
+        if(comparison_type == "sex"):
+            filtered_df = ensembl_df[ensembl_df['chromosome_name'].isin(['X', 'Y'])]
+            # print("first few lines of filtered ensembl:\n", filtered_df.head())
+            # print("last few lines of filtered ensembl:\n", filtered_df.tail())
+            # print("sex genes selected")
+        elif(comparison_type == "autosomal"):
+            filtered_df = ensembl_df[ensembl_df['chromosome_name'].str.contains(r'\d{1,2}')]
+            # print("first few lines of filtered ensembl:\n", filtered_df.head())
+            # print("last few lines of filtered ensembl:\n", filtered_df.tail())
+            # print("autosomal genes selected")
+        elif(comparison_type == "whole_genome"):
+            filtered_df = ensembl_df
+        else:
+            return("comparison type not recognized; please enter 'sex', 'autosomal', or 'whole genome' as your argument")
+
+        return filtered_df['ensembl_gene_id'].tolist()
+    
 
 def write_to_csv(output_df, output_filename):
     with open(output_filename, 'w') as writeFile:
