@@ -17,10 +17,33 @@ def main():
         output_filename = argv[4]
 
         expression_df = create_expression_dataframe(expression_filename, metadata_filename)
+        print("expression df pre-drop: \n", expression_df.head())
+        expression_columns = expression_df.columns.tolist()
+        print("expression columns length:", len(expression_columns))
 
-        #placeholder for filtering based on comparison type
-        ensembl_ids_list = select_chromosomes(comparison_type)
-        print(ensembl_ids_list[1:5])
+        #get ensembl gene ids for the indicated comparison type
+        ensembl_ids_to_drop = get_drop_columns(comparison_type)
+        
+        intersection_set = set(expression_columns) & set(ensembl_ids_to_drop)
+        intersection_list = list(intersection_set)
+        print("set length: ", len(intersection_list))
+
+        '''
+        print("ids to drop length: ", len(ensembl_ids_to_drop))
+        count=0
+        for id in ensembl_ids_to_drop:
+            if id not in expression_columns:
+                count+=1
+                ensembl_ids_to_drop.remove(id)
+        print("count: ", count)
+        print("ids to drop length: ", len(ensembl_ids_to_drop))
+        '''
+
+        #drop_columns = [col for col in ensembl_ids_to_drop if col not in expression_df.columns]
+        #print("ids to drop: ", drop_columns[0:5])
+
+        expression_df.drop(columns=intersection_list, axis=1, inplace=True)
+        print("expression df post-drop: \n", expression_df.head())
 
         #target vector, sex
         sex_col = expression_df['refinebio_sex']
@@ -80,31 +103,28 @@ def create_expression_dataframe(expression_filename, metadata_filename):
         #only keep rows with existing sex data
         values_to_keep = ['male', 'female']
         merged_df = merged_df[merged_df['refinebio_sex'].isin(values_to_keep)]
-        print("merged data frame: \n", merged_df)
         return merged_df
 
 #returns a list of ensembl ID's to use, based on the user's comparison type input
 #is this if-else logic okay, or should it be a try-catch block?
-def select_chromosomes(comparison_type):
+def get_drop_columns(comparison_type):
 
     with open("ensembl_data.tsv", "r") as readFile:
         ensembl_df = pd.read_csv(readFile, sep='\t')
 
         if(comparison_type == "sex"):
-            filtered_df = ensembl_df[ensembl_df['chromosome_name'].isin(['X', 'Y'])]
-            # print("first few lines of filtered ensembl:\n", filtered_df.head())
-            # print("last few lines of filtered ensembl:\n", filtered_df.tail())
-            # print("sex genes selected")
-        elif(comparison_type == "autosomal"):
             filtered_df = ensembl_df[ensembl_df['chromosome_name'].str.contains(r'\d{1,2}')]
-            # print("first few lines of filtered ensembl:\n", filtered_df.head())
-            # print("last few lines of filtered ensembl:\n", filtered_df.tail())
-            # print("autosomal genes selected")
+        elif(comparison_type == "autosomal"):
+            filtered_df = ensembl_df[ensembl_df['chromosome_name'].isin(['X', 'Y'])]
         elif(comparison_type == "whole_genome"):
             filtered_df = ensembl_df
         else:
             return("comparison type not recognized; please enter 'sex', 'autosomal', or 'whole genome' as your argument")
 
+        #dropping unneccessary columns to ensure that they aren't interfering with the cross validation results 
+        filtered_df.drop(columns=['gene_biotype','external_gene_name'], axis=1, inplace=True)
+        print(filtered_df.head())
+        
         return filtered_df['ensembl_gene_id'].tolist()
     
 
