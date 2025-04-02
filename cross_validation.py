@@ -17,31 +17,14 @@ def main():
         output_filename = argv[4]
 
         expression_df = create_expression_dataframe(expression_filename, metadata_filename)
-        print("expression df pre-drop: \n", expression_df.head())
         expression_columns = expression_df.columns.tolist()
-        print("expression columns length:", len(expression_columns))
 
-        #get ensembl gene ids for the indicated comparison type
+        #get ensembl gene ids for the indicated comparison type, then get the set of those that are included in the expression_df
         ensembl_ids_to_drop = get_drop_columns(comparison_type)
-        
         intersection_set = set(expression_columns) & set(ensembl_ids_to_drop)
         intersection_list = list(intersection_set)
-        print("set length: ", len(intersection_list))
 
-        '''
-        print("ids to drop length: ", len(ensembl_ids_to_drop))
-        count=0
-        for id in ensembl_ids_to_drop:
-            if id not in expression_columns:
-                count+=1
-                ensembl_ids_to_drop.remove(id)
-        print("count: ", count)
-        print("ids to drop length: ", len(ensembl_ids_to_drop))
-        '''
-
-        #drop_columns = [col for col in ensembl_ids_to_drop if col not in expression_df.columns]
-        #print("ids to drop: ", drop_columns[0:5])
-
+        #drop columns that are for unwanted gene IDs
         expression_df.drop(columns=intersection_list, axis=1, inplace=True)
         print("expression df post-drop: \n", expression_df.head())
 
@@ -105,8 +88,10 @@ def create_expression_dataframe(expression_filename, metadata_filename):
         merged_df = merged_df[merged_df['refinebio_sex'].isin(values_to_keep)]
         return merged_df
 
-#returns a list of ensembl ID's to use, based on the user's comparison type input
-#is this if-else logic okay, or should it be a try-catch block?
+#returns a list of ensembl ID's to delete, based on the user's comparison type input
+#if a user inputs 'sex', this function will return a list of gene ID's for genes 1-23
+#if a user inputs 'autosomal', this function will return a list of gene ID's for XY genes
+
 def get_drop_columns(comparison_type):
 
     with open("ensembl_data.tsv", "r") as readFile:
@@ -116,6 +101,7 @@ def get_drop_columns(comparison_type):
             filtered_df = ensembl_df[ensembl_df['chromosome_name'].str.contains(r'\d{1,2}')]
         elif(comparison_type == "autosomal"):
             filtered_df = ensembl_df[ensembl_df['chromosome_name'].isin(['X', 'Y'])]
+            print(f"there are {len(filtered_df)} xy genes")
         elif(comparison_type == "whole_genome"):
             filtered_df = ensembl_df
         else:
@@ -123,7 +109,7 @@ def get_drop_columns(comparison_type):
 
         #dropping unneccessary columns to ensure that they aren't interfering with the cross validation results 
         filtered_df.drop(columns=['gene_biotype','external_gene_name'], axis=1, inplace=True)
-        print(filtered_df.head())
+        #print(filtered_df.head())
         
         return filtered_df['ensembl_gene_id'].tolist()
     
