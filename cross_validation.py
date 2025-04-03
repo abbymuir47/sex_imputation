@@ -1,27 +1,30 @@
 import pandas as pd
 import numpy as np
 from sys import argv
+from sklearn import tree
+from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import cross_val_score
 
-# command line command to run the program: python3 cross_validation.py GSE10358/GSE10358.tsv GSE10358/metadata_GSE10358.tsv sex myoutput.tsv
+# command line command to run the program: python3 cross_validation.py GSE10358/GSE10358.tsv GSE10358/metadata_GSE10358.tsv sex random_forest myoutput.tsv
 
 def main():
     try:
-        if len(argv) != 5:
+        if len(argv) != 6:
             raise ValueError("Incorrect number of arguments. Please provide exactly 4 arguments.")
         
         #assign arguments to variables
         expression_filename = argv[1]
         metadata_filename = argv[2]
         comparison_type = argv[3]
-        output_filename = argv[4]
+        model_type = argv[4]
+        output_filename = argv[5]
 
         #create and filter a dataframe of gene expression data, calculate roc auc scores of sex imputation predictions for the data, and write the output to a tsv file
         expression_df = create_expression_dataframe(expression_filename, metadata_filename)
         expression_df = filter_by_comparison_type(expression_df, comparison_type)
-        roc_auc_scores = calculate_roc_auc(expression_df)
-        write_to_csv(expression_filename, roc_auc_scores, output_filename)
+        roc_auc_scores = calculate_roc_auc(expression_df, model_type)
+        write_to_tsv(expression_filename, roc_auc_scores, output_filename)
 
     except ValueError as ve:
         print(f"Error: {ve}")
@@ -85,7 +88,7 @@ def filter_by_comparison_type(expression_df, comparison_type):
     expression_df.drop(columns=intersection_list, axis=1, inplace=True)
     return expression_df
 
-def calculate_roc_auc(expression_df):
+def calculate_roc_auc(expression_df, model_type):
     #target vector, sex
     sex_col = expression_df['refinebio_sex']
     y = sex_col
@@ -93,25 +96,36 @@ def calculate_roc_auc(expression_df):
     #feature matrix, gene expression data
     X = expression_df.drop(columns=["refinebio_accession_code", "refinebio_sex"])
 
-    #hyper parameters
-    rf_model = RandomForestClassifier(n_estimators = 1000,
-                                criterion = 'entropy',
-                                min_samples_split = 10,
-                                max_depth = 14
-    )
+    #create model with correct criteria 
+    try:
+        if(model_type == "random_forest"):
+            model = RandomForestClassifier(n_estimators = 1000,
+                                        criterion = 'entropy',
+                                        min_samples_split = 10,
+                                        max_depth = 14
+            )
+        elif(model_type == "decision_trees"):
+            model = tree.DecisionTreeClassifier(max_depth = 5)
+
+        elif(model_type == "logistic_regression"):
+            model = LogisticRegression(penalty='elasticnet', solver='saga', C=0.1, l1_ratio=0.2)
+
+    except ValueError as ve:
+        print(f"Error: please enter model type as random_forest, decision_trees, or logistic_regression")
+
 
     # Create binary for y_true (turn male/female into zeroes and ones)
     binary_sex_col = sex_col.map({'male': 1, 'female': 0})
 
     #Calculate ROC AUC
     print("Calculating ROC AUC... ")
-    roc_auc_scores = cross_val_score(rf_model, X, binary_sex_col, cv=5, scoring='roc_auc')
-    print(f'ROC AUC scores for each fold: {roc_auc_scores}')
-    print(f'Mean ROC AUC score: {roc_auc_scores.mean()}')
+    roc_auc_scores = cross_val_score(model, X, binary_sex_col, cv=5, scoring='roc_auc')
+    print(f'ROC AUC scores for each fold, using {model_type} model: {roc_auc_scores}')
+    print(f'Mean ROC AUC score, using {model_type} model: {roc_auc_scores.mean()}')
     return roc_auc_scores
     
 
-def write_to_csv(expression_filename, roc_auc_scores, output_filename):
+def write_to_tsv(expression_filename, roc_auc_scores, output_filename):
     #create output df
     cv_folds = np.arange(1, len(roc_auc_scores) + 1)
     output_df = pd.DataFrame({
