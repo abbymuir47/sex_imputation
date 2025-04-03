@@ -10,58 +10,18 @@ def main():
     try:
         if len(argv) != 5:
             raise ValueError("Incorrect number of arguments. Please provide exactly 4 arguments.")
+        
         #assign arguments to variables
         expression_filename = argv[1]
         metadata_filename = argv[2]
         comparison_type = argv[3]
         output_filename = argv[4]
 
+        #create and filter a dataframe of gene expression data, calculate roc auc scores of sex imputation predictions for the data, and write the output to a tsv file
         expression_df = create_expression_dataframe(expression_filename, metadata_filename)
-        expression_columns = expression_df.columns.tolist()
-
-        #get ensembl gene ids for the indicated comparison type, then get the set of those that are included in the expression_df
-        ensembl_ids_to_drop = get_drop_columns(comparison_type)
-        intersection_set = set(expression_columns) & set(ensembl_ids_to_drop)
-        intersection_list = list(intersection_set)
-
-        #drop columns that are for unwanted gene IDs
-        expression_df.drop(columns=intersection_list, axis=1, inplace=True)
-        print("expression df post-drop: \n", expression_df.head())
-
-        #target vector, sex
-        sex_col = expression_df['refinebio_sex']
-        y = sex_col
-
-        #feature matrix, gene expression data
-        X = expression_df.drop(columns=["refinebio_accession_code", "refinebio_sex"])
-
-        #hyper parameters
-        rf_model = RandomForestClassifier(n_estimators = 1000,
-                                    criterion = 'entropy',
-                                    min_samples_split = 10,
-                                    max_depth = 14
-        )
-
-        # Create binary for y_true (turn male/female into zeroes and ones)
-        binary_sex_col = sex_col.map({'male': 1, 'female': 0})
-
-        #Calculate ROC AUC
-        print("Calculating ROC AUC... ")
-        roc_auc_scores = cross_val_score(rf_model, X, binary_sex_col, cv=5, scoring='roc_auc')
-        print(f'ROC AUC scores for each fold: {roc_auc_scores}')
-        print(f'Mean ROC AUC score: {roc_auc_scores.mean()}')
-
-        #create output file
-        cv_folds = np.arange(1, len(roc_auc_scores) + 1)
-        output_df = pd.DataFrame({
-            'input_filename' : [expression_filename] * len(roc_auc_scores),
-            'cv_fold' : cv_folds,
-            'roc_score' : roc_auc_scores
-        })
-
-        write_to_csv(output_df, output_filename)
-
-
+        expression_df = filter_by_comparison_type(expression_df, comparison_type)
+        roc_auc_scores = calculate_roc_auc(expression_df)
+        write_to_csv(expression_filename, roc_auc_scores, output_filename)
 
     except ValueError as ve:
         print(f"Error: {ve}")
@@ -112,9 +72,55 @@ def get_drop_columns(comparison_type):
         #print(filtered_df.head())
         
         return filtered_df['ensembl_gene_id'].tolist()
+
+def filter_by_comparison_type(expression_df, comparison_type):
+    expression_columns = expression_df.columns.tolist()
+
+    #get ensembl gene ids for the indicated comparison type, then get the set of those that are included in the expression_df
+    ensembl_ids_to_drop = get_drop_columns(comparison_type)
+    intersection_set = set(expression_columns) & set(ensembl_ids_to_drop)
+    intersection_list = list(intersection_set)
+
+    #drop columns that are for unwanted gene IDs
+    expression_df.drop(columns=intersection_list, axis=1, inplace=True)
+    return expression_df
+
+def calculate_roc_auc(expression_df):
+    #target vector, sex
+    sex_col = expression_df['refinebio_sex']
+    y = sex_col
+
+    #feature matrix, gene expression data
+    X = expression_df.drop(columns=["refinebio_accession_code", "refinebio_sex"])
+
+    #hyper parameters
+    rf_model = RandomForestClassifier(n_estimators = 1000,
+                                criterion = 'entropy',
+                                min_samples_split = 10,
+                                max_depth = 14
+    )
+
+    # Create binary for y_true (turn male/female into zeroes and ones)
+    binary_sex_col = sex_col.map({'male': 1, 'female': 0})
+
+    #Calculate ROC AUC
+    print("Calculating ROC AUC... ")
+    roc_auc_scores = cross_val_score(rf_model, X, binary_sex_col, cv=5, scoring='roc_auc')
+    print(f'ROC AUC scores for each fold: {roc_auc_scores}')
+    print(f'Mean ROC AUC score: {roc_auc_scores.mean()}')
+    return roc_auc_scores
     
 
-def write_to_csv(output_df, output_filename):
+def write_to_csv(expression_filename, roc_auc_scores, output_filename):
+    #create output df
+    cv_folds = np.arange(1, len(roc_auc_scores) + 1)
+    output_df = pd.DataFrame({
+        'input_filename' : [expression_filename] * len(roc_auc_scores),
+        'cv_fold' : cv_folds,
+        'roc_score' : roc_auc_scores
+    })
+
+    #write output df to tsv file
     with open(output_filename, 'w') as writeFile:
         output_df.to_csv(writeFile, sep='\t', index=False)
         print(f"ROC AUC has been written to {output_filename}.")
