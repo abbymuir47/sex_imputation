@@ -14,7 +14,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.model_selection import cross_val_score, GridSearchCV, train_test_split, StratifiedKFold
 
-# command line command to run the program: 
+# command line commands to run the program with different model types: 
 # python3 cross_validation.py GSE10358/GSE10358.tsv GSE10358/metadata_GSE10358.tsv sex random_forest myoutput.tsv
 # python3 cross_validation.py GSE10358/GSE10358.tsv GSE10358/metadata_GSE10358.tsv sex logistic_regression myoutput.tsv
 # python3 cross_validation.py GSE10358/GSE10358.tsv GSE10358/metadata_GSE10358.tsv sex decision_trees myoutput.tsv
@@ -65,9 +65,7 @@ def create_expression_dataframe(expression_filename, metadata_filename):
 #returns a list of ensembl ID's to delete, based on the user's comparison type input
 #if a user inputs 'sex', this function will return a list of gene ID's for genes 1-23
 #if a user inputs 'autosomal', this function will return a list of gene ID's for XY genes
-
 def get_drop_columns(comparison_type):
-
     with open("ensembl_data.tsv", "r") as readFile:
         ensembl_df = pd.read_csv(readFile, sep='\t')
 
@@ -83,10 +81,9 @@ def get_drop_columns(comparison_type):
 
         #dropping unneccessary columns to ensure that they aren't interfering with the cross validation results 
         filtered_df = filtered_df.drop(columns=['gene_biotype','external_gene_name'], axis=1)
-        #print(filtered_df.head())
-        
         return filtered_df['ensembl_gene_id'].tolist()
 
+#modifies dataframe to only include desired genes based on user's selected comparison type
 def filter_by_comparison_type(expression_df, comparison_type):
     expression_columns = expression_df.columns.tolist()
 
@@ -99,6 +96,7 @@ def filter_by_comparison_type(expression_df, comparison_type):
     expression_df = expression_df.drop(columns=intersection_list, axis=1)
     return expression_df
 
+#calculates roc auc scores for the data
 def calculate_roc_auc(expression_df, model_type):
     #target vector, sex
     sex_col = expression_df['refinebio_sex']
@@ -108,62 +106,46 @@ def calculate_roc_auc(expression_df, model_type):
     X = expression_df.drop(columns=["refinebio_accession_code", "refinebio_sex"])
 
     #create model with correct criteria 
-    try:
-        if(model_type == "random_forest"):
-            # Best Parameters: {'bootstrap': False, 'max_depth': None, 'min_samples_leaf': 1, 'min_samples_split': 20, 'n_estimators': 500}
-            # Best Score:  0.9625
-            model = RandomForestClassifier(bootstrap=False, 
-                                            max_depth=None, 
-                                            min_samples_leaf=1, 
-                                            min_samples_split=20, 
-                                            n_estimators=500)
-
-        elif(model_type == "decision_trees"):
-            # Best Parameters: {'criterion': 'entropy', 'max_depth': None, 'min_samples_leaf': 2, 'min_samples_split': 2}
-            # Best Score:  0.9374113475177305
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=40)
-            param_grid = {
-                'criterion': ['gini', 'entropy'],
-                'max_depth': [None, 5, 10, 15],
-                'min_samples_split': [2, 5, 10],
-                'min_samples_leaf': [1, 2, 5]
-            }
-            dtree = DecisionTreeClassifier(random_state=42)
-            grid_search = GridSearchCV(estimator=dtree, 
-                                 param_grid=param_grid, 
-                                 cv=5, 
-                                 scoring='accuracy')
-            grid_search.fit(X_train, y_train)
-            print("Best Parameters:", grid_search.best_params_)
-            print("Best Score: ", grid_search.best_score_)
-
-            model = tree.DecisionTreeClassifier(max_depth = 5)
-
-        elif(model_type == "logistic_regression"):
-            # Best Parameters: {'C': 0.01, 'l1_ratio': 0.5, 'penalty': 'elasticnet', 'solver': 'saga'}
-            # Best Score:  0.9416666666666668
-            model = LogisticRegression(penalty='elasticnet', 
-                                        solver='saga', 
-                                        C=0.01, 
-                                        l1_ratio=0.5, 
-                                        max_iter=1000)
-
-    except ValueError as ve:
-        print(f"Error: please enter model type as random_forest, decision_trees, or logistic_regression")
-
-
+    model = make_model(model_type)
+    
     # Create binary for y_true (turn male/female into zeroes and ones)
     binary_sex_col = sex_col.map({'male': 1, 'female': 0})
 
     #Calculate ROC AUC
     print("Calculating ROC AUC... ")
-    cv = StratifiedKFold(n_splits=5, shuffle=True)
-    roc_auc_scores = cross_val_score(model, X, binary_sex_col, cv=cv, scoring='roc_auc')
+    #cv = StratifiedKFold(n_splits=5, shuffle=True)
+    roc_auc_scores = cross_val_score(model, X, binary_sex_col, cv=5, scoring='roc_auc')
     print(f'ROC AUC scores for each fold, using {model_type} model: {roc_auc_scores}')
     print(f'Mean ROC AUC score, using {model_type} model: {roc_auc_scores.mean()}')
     return roc_auc_scores
-    
 
+#makes the classification model with the best criteria given a user's choice     
+def make_model(model_type):
+    try:
+        if(model_type == "random_forest"):
+            # Best Parameters: {'bootstrap': False, 'max_depth': None, 'min_samples_leaf': 1, 'min_samples_split': 20, 'n_estimators': 500}, Best Score:  0.9625
+            model = RandomForestClassifier(bootstrap=False, 
+                                            max_depth=None, 
+                                            min_samples_leaf=1, 
+                                            min_samples_split=20, 
+                                            n_estimators=500)
+        elif(model_type == "decision_trees"):
+            # Best Parameters: {'criterion': 'entropy', 'max_depth': None, 'min_samples_leaf': 2, 'min_samples_split': 2}, Best Score:  0.9374113475177305
+            model = tree.DecisionTreeClassifier(criterion='entropy',
+                                                max_depth = None,
+                                                min_samples_leaf=2, 
+                                                min_samples_split=2)
+        elif(model_type == "logistic_regression"):
+            # Best Parameters: {'C': 0.01, 'l1_ratio': 0.5, 'penalty': 'elasticnet', 'solver': 'saga'}, Best Score:  0.9416666666666668
+            model = LogisticRegression(penalty='elasticnet', 
+                                        solver='saga', 
+                                        C=0.01, 
+                                        l1_ratio=0.5, 
+                                        max_iter=1000)
+    except ValueError as ve:
+        print(f"Error: please enter model type as random_forest, decision_trees, or logistic_regression")
+
+#writes the given roc auc scores to a tsv file 
 def write_to_tsv(expression_filename, roc_auc_scores, output_filename):
     #create output df
     cv_folds = np.arange(1, len(roc_auc_scores) + 1)
@@ -172,7 +154,6 @@ def write_to_tsv(expression_filename, roc_auc_scores, output_filename):
         'cv_fold' : cv_folds,
         'roc_score' : roc_auc_scores
     })
-
     #write output df to tsv file
     with open(output_filename, 'w') as writeFile:
         output_df.to_csv(writeFile, sep='\t', index=False)
