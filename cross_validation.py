@@ -11,6 +11,7 @@ from sys import argv
 from sklearn import tree
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.tree import DecisionTreeClassifier
 from sklearn.model_selection import cross_val_score, GridSearchCV, train_test_split, StratifiedKFold
 
 # command line command to run the program: 
@@ -111,42 +112,41 @@ def calculate_roc_auc(expression_df, model_type):
         if(model_type == "random_forest"):
             # Best Parameters: {'bootstrap': False, 'max_depth': None, 'min_samples_leaf': 1, 'min_samples_split': 20, 'n_estimators': 500}
             # Best Score:  0.9625
-            model = RandomForestClassifier(n_estimators = 1000,
-                                        criterion = 'entropy',
-                                        min_samples_split = 10,
-                                        max_depth = 14
-            )
-
-            # training and testing sets
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=40)
-            # Parameter grid to expore
-            param_grid = {
-                'n_estimators': [10,100,500,1000],
-                'min_samples_split': [2,5,10,20],
-                'min_samples_leaf': [1,2,4],
-                'max_depth': [None, 10,15,20,30],
-                'bootstrap': [True, False]
-            }
-
-            rand_forest = RandomForestClassifier(random_state=40)
-            grid_s = GridSearchCV(
-                estimator=rand_forest,
-                param_grid=param_grid,
-                cv=5,
-                scoring='accuracy',
-                n_jobs=-1
-            )
-            grid_s.fit(X_train, y_train)
-            print("Best Parameters:", grid_s.best_params_)
-            print("Best Score: ", grid_s.best_score_)
+            model = RandomForestClassifier(bootstrap=False, 
+                                            max_depth=None, 
+                                            min_samples_leaf=1, 
+                                            min_samples_split=20, 
+                                            n_estimators=500)
 
         elif(model_type == "decision_trees"):
+            # Best Parameters: {'criterion': 'entropy', 'max_depth': None, 'min_samples_leaf': 2, 'min_samples_split': 2}
+            # Best Score:  0.9374113475177305
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=40)
+            param_grid = {
+                'criterion': ['gini', 'entropy'],
+                'max_depth': [None, 5, 10, 15],
+                'min_samples_split': [2, 5, 10],
+                'min_samples_leaf': [1, 2, 5]
+            }
+            dtree = DecisionTreeClassifier(random_state=42)
+            grid_search = GridSearchCV(estimator=dtree, 
+                                 param_grid=param_grid, 
+                                 cv=5, 
+                                 scoring='accuracy')
+            grid_search.fit(X_train, y_train)
+            print("Best Parameters:", grid_search.best_params_)
+            print("Best Score: ", grid_search.best_score_)
+
             model = tree.DecisionTreeClassifier(max_depth = 5)
 
         elif(model_type == "logistic_regression"):
             # Best Parameters: {'C': 0.01, 'l1_ratio': 0.5, 'penalty': 'elasticnet', 'solver': 'saga'}
             # Best Score:  0.9416666666666668
-            model = LogisticRegression(penalty='elasticnet', solver='saga', C=0.01, l1_ratio=0.5, max_iter=1000)
+            model = LogisticRegression(penalty='elasticnet', 
+                                        solver='saga', 
+                                        C=0.01, 
+                                        l1_ratio=0.5, 
+                                        max_iter=1000)
 
     except ValueError as ve:
         print(f"Error: please enter model type as random_forest, decision_trees, or logistic_regression")
