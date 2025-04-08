@@ -5,6 +5,7 @@ from sklearn import tree
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import GridSearchCV, train_test_split
 
 # command line command to run the program: python3 cross_validation.py GSE10358/GSE10358.tsv GSE10358/metadata_GSE10358.tsv sex random_forest myoutput.tsv
 
@@ -71,7 +72,7 @@ def get_drop_columns(comparison_type):
             return("comparison type not recognized; please enter 'sex', 'autosomal', or 'whole genome' as your argument")
 
         #dropping unneccessary columns to ensure that they aren't interfering with the cross validation results 
-        filtered_df.drop(columns=['gene_biotype','external_gene_name'], axis=1, inplace=True)
+        filtered_df = filtered_df.drop(columns=['gene_biotype','external_gene_name'], axis=1)
         #print(filtered_df.head())
         
         return filtered_df['ensembl_gene_id'].tolist()
@@ -85,7 +86,7 @@ def filter_by_comparison_type(expression_df, comparison_type):
     intersection_list = list(intersection_set)
 
     #drop columns that are for unwanted gene IDs
-    expression_df.drop(columns=intersection_list, axis=1, inplace=True)
+    expression_df = expression_df.drop(columns=intersection_list, axis=1)
     return expression_df
 
 def calculate_roc_auc(expression_df, model_type):
@@ -109,6 +110,28 @@ def calculate_roc_auc(expression_df, model_type):
 
         elif(model_type == "logistic_regression"):
             model = LogisticRegression(penalty='elasticnet', solver='saga', C=0.1, l1_ratio=0.2)
+
+            # training and testing sets
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=40)
+            # Parameter grid to expore
+            param_grid = {
+                'C': [0.01, 0.1, 1, 10, 100],
+                'penalty':['elasticnet'],
+                'solver': ['saga'],
+                'l1_ratio': [0, 0.2, 0.5, 0.8, 1]
+            }
+
+            log_r = LogisticRegression(max_iter=400)
+            grid_s = GridSearchCV(
+                estimator=log_r,
+                param_grid=param_grid,
+                cv=5,
+                scoring='accuracy',
+                n_jobs=-1
+            )
+            grid_s.fit(X_train, y_train)
+            print("Best Parameters:", grid_s.best_params_)
+            print("Best Score: ", grid_s.best_score_)
 
     except ValueError as ve:
         print(f"Error: please enter model type as random_forest, decision_trees, or logistic_regression")
