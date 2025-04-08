@@ -1,13 +1,22 @@
 import pandas as pd
 import numpy as np
+
+import warnings
+from sklearn.exceptions import ConvergenceWarning
+
+# Suppress all ConvergenceWarnings from scikit-learn
+warnings.filterwarnings('ignore', category=ConvergenceWarning, module='sklearn')
+
 from sys import argv
 from sklearn import tree
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import cross_val_score
-from sklearn.model_selection import GridSearchCV, train_test_split
+from sklearn.model_selection import cross_val_score, GridSearchCV, train_test_split, StratifiedKFold
 
-# command line command to run the program: python3 cross_validation.py GSE10358/GSE10358.tsv GSE10358/metadata_GSE10358.tsv sex random_forest myoutput.tsv
+# command line command to run the program: 
+# python3 cross_validation.py GSE10358/GSE10358.tsv GSE10358/metadata_GSE10358.tsv sex random_forest myoutput.tsv
+# python3 cross_validation.py GSE10358/GSE10358.tsv GSE10358/metadata_GSE10358.tsv sex logistic_regression myoutput.tsv
+# python3 cross_validation.py GSE10358/GSE10358.tsv GSE10358/metadata_GSE10358.tsv sex decision_trees myoutput.tsv
 
 def main():
     try:
@@ -100,30 +109,28 @@ def calculate_roc_auc(expression_df, model_type):
     #create model with correct criteria 
     try:
         if(model_type == "random_forest"):
+            # Best Parameters: {'bootstrap': False, 'max_depth': None, 'min_samples_leaf': 1, 'min_samples_split': 20, 'n_estimators': 500}
+            # Best Score:  0.9625
             model = RandomForestClassifier(n_estimators = 1000,
                                         criterion = 'entropy',
                                         min_samples_split = 10,
                                         max_depth = 14
             )
-        elif(model_type == "decision_trees"):
-            model = tree.DecisionTreeClassifier(max_depth = 5)
-
-        elif(model_type == "logistic_regression"):
-            model = LogisticRegression(penalty='elasticnet', solver='saga', C=0.1, l1_ratio=0.2)
 
             # training and testing sets
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=40)
             # Parameter grid to expore
             param_grid = {
-                'C': [0.01, 0.1, 1, 10, 100],
-                'penalty':['elasticnet'],
-                'solver': ['saga'],
-                'l1_ratio': [0, 0.2, 0.5, 0.8, 1]
+                'n_estimators': [10,100,500,1000],
+                'min_samples_split': [2,5,10,20],
+                'min_samples_leaf': [1,2,4],
+                'max_depth': [None, 10,15,20,30],
+                'bootstrap': [True, False]
             }
 
-            log_r = LogisticRegression(max_iter=400)
+            rand_forest = RandomForestClassifier(random_state=40)
             grid_s = GridSearchCV(
-                estimator=log_r,
+                estimator=rand_forest,
                 param_grid=param_grid,
                 cv=5,
                 scoring='accuracy',
@@ -132,6 +139,14 @@ def calculate_roc_auc(expression_df, model_type):
             grid_s.fit(X_train, y_train)
             print("Best Parameters:", grid_s.best_params_)
             print("Best Score: ", grid_s.best_score_)
+
+        elif(model_type == "decision_trees"):
+            model = tree.DecisionTreeClassifier(max_depth = 5)
+
+        elif(model_type == "logistic_regression"):
+            # Best Parameters: {'C': 0.01, 'l1_ratio': 0.5, 'penalty': 'elasticnet', 'solver': 'saga'}
+            # Best Score:  0.9416666666666668
+            model = LogisticRegression(penalty='elasticnet', solver='saga', C=0.01, l1_ratio=0.5, max_iter=1000)
 
     except ValueError as ve:
         print(f"Error: please enter model type as random_forest, decision_trees, or logistic_regression")
@@ -142,7 +157,8 @@ def calculate_roc_auc(expression_df, model_type):
 
     #Calculate ROC AUC
     print("Calculating ROC AUC... ")
-    roc_auc_scores = cross_val_score(model, X, binary_sex_col, cv=5, scoring='roc_auc')
+    cv = StratifiedKFold(n_splits=5, shuffle=True)
+    roc_auc_scores = cross_val_score(model, X, binary_sex_col, cv=cv, scoring='roc_auc')
     print(f'ROC AUC scores for each fold, using {model_type} model: {roc_auc_scores}')
     print(f'Mean ROC AUC score, using {model_type} model: {roc_auc_scores.mean()}')
     return roc_auc_scores
