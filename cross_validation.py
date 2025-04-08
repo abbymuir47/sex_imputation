@@ -13,6 +13,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.model_selection import cross_val_score, GridSearchCV, train_test_split, StratifiedKFold
+from sklearn.feature_selection import SelectKBest, f_classif
 
 # command line commands to run the program with different model types: 
 # python3 cross_validation.py GSE10358/GSE10358.tsv GSE10358/metadata_GSE10358.tsv sex random_forest myoutput.tsv
@@ -32,9 +33,9 @@ def main():
         output_filename = argv[5]
 
         #create and filter a dataframe of gene expression data, calculate roc auc scores of sex imputation predictions for the data, and write the output to a tsv file
-        expression_df = create_expression_dataframe(expression_filename, metadata_filename)
+        columns, expression_df = create_expression_dataframe(expression_filename, metadata_filename)
         expression_df = filter_by_comparison_type(expression_df, comparison_type)
-        roc_auc_scores = calculate_roc_auc(expression_df, model_type)
+        roc_auc_scores = calculate_roc_auc(expression_df, model_type, columns)
         write_to_tsv(expression_filename, roc_auc_scores, output_filename)
 
     except ValueError as ve:
@@ -60,7 +61,9 @@ def create_expression_dataframe(expression_filename, metadata_filename):
         #only keep rows with existing sex data
         values_to_keep = ['male', 'female']
         merged_df = merged_df[merged_df['refinebio_sex'].isin(values_to_keep)]
-        return merged_df
+        columns = merged_df.columns.tolist()
+        
+        return columns, merged_df
 
 #returns a list of ensembl ID's to delete, based on the user's comparison type input
 #if a user inputs 'sex', this function will return a list of gene ID's for genes 1-23
@@ -97,13 +100,15 @@ def filter_by_comparison_type(expression_df, comparison_type):
     return expression_df
 
 #calculates roc auc scores for the data
-def calculate_roc_auc(expression_df, model_type):
+def calculate_roc_auc(expression_df, model_type, gene_names):
     #target vector, sex
     sex_col = expression_df['refinebio_sex']
     y = sex_col
 
     #feature matrix, gene expression data
     X = expression_df.drop(columns=["refinebio_accession_code", "refinebio_sex"])
+
+    select_features(X,y, gene_names)
 
     #create model with correct criteria 
     model = make_model(model_type)
@@ -158,6 +163,21 @@ def write_to_tsv(expression_filename, roc_auc_scores, output_filename):
     with open(output_filename, 'w') as writeFile:
         output_df.to_csv(writeFile, sep='\t', index=False)
         print(f"ROC AUC has been written to {output_filename}.")
+
+def select_features(X,y, gene_names):
+    print("Performing Univariate Feature Selection\n")
+    print("X.shape: ", X.shape)
+    selector = SelectKBest(f_classif, k=10)
+    
+    X_new = selector.fit_transform(X, y)
+    print("New X.shape: ",X_new.shape)
+
+    selected_mask = selector.get_support()
+    selected_features = [gene_names[i] for i in range(len(gene_names)) if selected_mask[i]]
+
+    print("Selected features: ", selected_features)
+
+
 
 
 if __name__ == "__main__":
