@@ -118,8 +118,10 @@ def calculate_roc_auc(expression_df, model_type, gene_names):
 
     #Calculate ROC AUC
     print("Calculating ROC AUC... ")
-    #cv = StratifiedKFold(n_splits=5, shuffle=True)
-    roc_auc_scores = cross_val_score(model, X, binary_sex_col, cv=5, scoring='roc_auc')
+
+    random.seed(42)
+    cv = StratifiedKFold(n_splits=5, shuffle=False)
+    roc_auc_scores = cross_val_score(model, X, binary_sex_col, cv=cv, scoring='roc_auc')
     print(f'ROC AUC scores for each fold, using {model_type} model: {roc_auc_scores}')
     print(f'Mean ROC AUC score, using {model_type} model: {roc_auc_scores.mean()}')
     return roc_auc_scores
@@ -133,13 +135,15 @@ def make_model(model_type):
                                             max_depth=None, 
                                             min_samples_leaf=1, 
                                             min_samples_split=20, 
-                                            n_estimators=500)
+                                            n_estimators=500, 
+                                            random_state = 42)
         elif(model_type == "decision_trees"):
             # Best Parameters: {'criterion': 'entropy', 'max_depth': None, 'min_samples_leaf': 2, 'min_samples_split': 2}, Best Score:  0.9374113475177305
             model = tree.DecisionTreeClassifier(criterion='entropy',
                                                 max_depth = None,
                                                 min_samples_leaf=2, 
-                                                min_samples_split=2)
+                                                min_samples_split=2, 
+                                                random_state = 42)
         elif(model_type == "logistic_regression"):
             # Best Parameters: {'C': 0.01, 'l1_ratio': 0.5, 'penalty': 'elasticnet', 'solver': 'saga'}, Best Score:  0.9416666666666668
             model = LogisticRegression(penalty='elasticnet', 
