@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import random
 
 import warnings
 from sklearn.exceptions import ConvergenceWarning
@@ -15,10 +16,20 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.model_selection import cross_val_score, GridSearchCV, train_test_split, StratifiedKFold
 from sklearn.feature_selection import SelectKBest, f_classif
 
+#imports for recursive feature selection
+from sklearn.feature_selection import RFE
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import MinMaxScaler
+
 # command line commands to run the program with different model types: 
 # python3 cross_validation.py GSE10358/GSE10358.tsv GSE10358/metadata_GSE10358.tsv sex random_forest myoutput.tsv
 # python3 cross_validation.py GSE10358/GSE10358.tsv GSE10358/metadata_GSE10358.tsv sex logistic_regression myoutput.tsv
 # python3 cross_validation.py GSE10358/GSE10358.tsv GSE10358/metadata_GSE10358.tsv sex decision_trees myoutput.tsv
+
+# python3 cross_validation.py GSE61804/GSE61804.tsv GSE61804/metadata_GSE61804.tsv sex logistic_regression myoutput.tsv
+# python3 cross_validation.py GSE6891/GSE6891.tsv GSE6891/metadata_GSE6891.tsv sex logistic_regression myoutput.tsv
+# python3 cross_validation.py GSE14468/GSE14468.tsv GSE14468/metadata_GSE14468.tsv sex logistic_regression myoutput.tsv
 
 def main():
     try:
@@ -108,7 +119,8 @@ def calculate_roc_auc(expression_df, model_type, gene_names):
     #feature matrix, gene expression data
     X = expression_df.drop(columns=["refinebio_accession_code", "refinebio_sex"])
 
-    select_features(X,y, gene_names)
+    univariate_selection(X,y)
+    #recursive_elimination(X,y)
 
     #create model with correct criteria 
     model = make_model(model_type)
@@ -122,6 +134,7 @@ def calculate_roc_auc(expression_df, model_type, gene_names):
     random.seed(42)
     cv = StratifiedKFold(n_splits=5, shuffle=False)
     roc_auc_scores = cross_val_score(model, X, binary_sex_col, cv=cv, scoring='roc_auc')
+    
     print(f'ROC AUC scores for each fold, using {model_type} model: {roc_auc_scores}')
     print(f'Mean ROC AUC score, using {model_type} model: {roc_auc_scores.mean()}')
     return roc_auc_scores
@@ -144,6 +157,10 @@ def make_model(model_type):
                                                 min_samples_leaf=2, 
                                                 min_samples_split=2, 
                                                 random_state = 42)
+            # model = tree.DecisionTreeClassifier(criterion='entropy',
+            #                                     max_depth = None,
+            #                                     min_samples_leaf=2, 
+            #                                     min_samples_split=2)
         elif(model_type == "logistic_regression"):
             # Best Parameters: {'C': 0.01, 'l1_ratio': 0.5, 'penalty': 'elasticnet', 'solver': 'saga'}, Best Score:  0.9416666666666668
             model = LogisticRegression(penalty='elasticnet', 
@@ -151,6 +168,7 @@ def make_model(model_type):
                                         C=0.01, 
                                         l1_ratio=0.5, 
                                         max_iter=1000)
+        return model
     except ValueError as ve:
         print(f"Error: please enter model type as random_forest, decision_trees, or logistic_regression")
 
@@ -168,21 +186,45 @@ def write_to_tsv(expression_filename, roc_auc_scores, output_filename):
         output_df.to_csv(writeFile, sep='\t', index=False)
         print(f"ROC AUC has been written to {output_filename}.")
 
-def select_features(X,y, gene_names):
-    print("Performing Univariate Feature Selection\n")
-    print("X.shape: ", X.shape)
+def univariate_selection(X,y):
     selector = SelectKBest(f_classif, k=10)
     
     X_new = selector.fit_transform(X, y)
-    print("New X.shape: ",X_new.shape)
 
     selected_mask = selector.get_support()
-    selected_features = [gene_names[i] for i in range(len(gene_names)) if selected_mask[i]]
+    selected_features = [X.columns[i] for i in range(len(selected_mask)) if selected_mask[i]]
 
-    print("Selected features: ", selected_features)
+    print("Selected features, univariate selection: ", selected_features)
 
-
-
+def recursive_elimination(X,y):
+    print("in recursive elimination method")
+    pipe = Pipeline(
+        [
+            ("scaler", MinMaxScaler()),
+            ("rfe", RFE(estimator=LogisticRegression(),n_features_to_select=1, step=1))
+        ]
+    )
+    y_binary = y.map({'male': 1, 'female': 0})
+    pipe.fit(X,y_binary)
+    
+    '''
+    # Get the rankings and selected features
+    rfe = pipe.named_steps["rfe"]
+    rankings = rfe.ranking_
+    selected_features_mask = rfe.support_
+    
+    # Get the names of selected features
+    selected_features = X.columns[selected_features_mask].tolist()
+    
+    print("Selected features (RFE):", selected_features)
+    print("Feature rankings (lower is better):")
+    for feature, rank in zip(X.columns, rankings):
+        if rank <= 10:  # Only show top ranked features
+            print(f"{feature}: {rank}")
+    
+    # Return the transformed X with only selected features
+    return pipe.transform(X)
+    '''
 
 if __name__ == "__main__":
     main()
